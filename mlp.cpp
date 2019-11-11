@@ -16,6 +16,8 @@ vector<vector<vector<float> > > weight_matrices;
 vector<vector<vector<float> > > change_in_weights;
 int gradient_type;
 int batch_size;
+int epochs;
+int dataset = 0;//0 for shoppers and 1 for wine
 //start defining activation functions here
 
 void printVector(vector<float> v){
@@ -29,7 +31,7 @@ void read_record(vector<vector<float> > &input,vector<vector<float> >&labels,int
   // File pointer
   fstream fin;
   // Open an existing file
-  fin.open("winequality-red.csv", ios::in);
+  fin.open("modified_online_shoppers_intention.csv", ios::in);
   string line, word, temp;
 
   while (getline(fin, line)) {
@@ -56,6 +58,66 @@ void read_record(vector<vector<float> > &input,vector<vector<float> >&labels,int
 
     labels.push_back(label);
   }
+}
+
+void read_record_onehot(vector<vector<float> > &input,vector<vector<float> >&labels,int labelcount)
+{
+  // File pointer
+  fstream fin;
+  // Open an existing file
+  fin.open("winequality-red.csv", ios::in);
+  string line, word, temp;
+
+  while (getline(fin, line)) {
+    vector<float> row;
+    // used for breaking words
+    stringstream s(line);
+    //cout<<line;
+    // read every column data of a row and
+    // store it in a string variable, 'word'
+    while (getline(s, word, ';')) {
+
+      // add all the column data
+      // of a row to a vector
+      row.push_back(atof(word.c_str()));
+    }
+    vector<float> label;
+    for(int i = 0; i < labelcount;i++){
+      if(row[row.size()-1]==i+1)
+        label.push_back(1);
+      else
+        label.push_back(0);
+    }
+    row.pop_back();
+    printVector(label);
+    printVector(row);
+    input.push_back(row);
+
+    labels.push_back(label);
+  }
+}
+
+void createTrainTestSplit(vector<vector<float> > &input,vector<vector<float> >&labels,vector<vector<float> >&test_input,vector<vector<float> >&test_labels,int split){
+  for(int i = 0; i < split; i++){
+    cout<<"i m here"<<endl;
+    test_input.push_back(input[input.size()-1]);
+    test_labels.push_back(labels[labels.size()-1]);
+    input.pop_back();
+    labels.pop_back();
+  }
+  for(int i = 0; i < test_input.size(); i++){
+    cout<<i<<" printing test input"<<endl;
+    for(int j = 0; j < test_input[i].size(); j++){
+      cout<<test_input[i][j]<<" ";
+    }
+    cout<<endl;
+      cout<<i<<" printing test labels"<<endl;
+    for(int j = 0; j < test_labels[i].size(); j++){
+      cout<<test_labels[i][j]<<" ";
+    }
+    cout<<endl;
+  }
+
 }
 
 float relu(float x){//Rectified Linear Unit
@@ -106,10 +168,11 @@ float multiplyingFactor(float x,int n){
 
 vector<vector<float> > makeMatrix(int dim1,int dim2){//returns matrix of size dim2xdim1
   vector<vector<float> > ans;
+  srand((unsigned)time(0));
   for(int i = 0; i < dim2; i++){
     vector<float> v1;
     for(int j = 0; j < dim1; j++){
-      v1.push_back(0);//put some random weights here.Need to discuss this.
+      v1.push_back((rand()%100)/100);//put some random weights here.Need to discuss this.
     }
     ans.push_back(v1);
   }
@@ -118,6 +181,7 @@ vector<vector<float> > makeMatrix(int dim1,int dim2){//returns matrix of size di
 
 vector<float> intermediateOutputs(vector<vector<float> > weight_matrix,vector<float> input){
   vector<float> hidden1;
+  //cout<<"priniting without activation:"<<endl;
   for(int i = 0; i < weight_matrix.size(); i++){
     float sum = 0;
     for(int j = 0; j < input.size(); j++){
@@ -223,7 +287,7 @@ void updateWeights(){
   }
 }
 
-void printWeights(vector<vector<float> > &error_matrix,vector<float> input, vector<vector<float> > hidden_layer_values){
+void printWeights(){
   for(int i = 0; i < weight_matrices.size();i++){
     for(int j= 0; j < weight_matrices[i].size();j++){
       for(int k = 0; k < weight_matrices[i][j].size();k++){
@@ -235,7 +299,14 @@ void printWeights(vector<vector<float> > &error_matrix,vector<float> input, vect
 int main(){
   vector<vector<float> > input;//read input from user here
   vector<vector<float> >labels;
-  read_record(input,labels,1);
+  if(dataset == 0)
+    read_record(input,labels,1);
+  else{
+    read_record_onehot(input,labels,10);
+  }
+  random_shuffle(input.begin(),input.end());
+  vector<vector<float> > test_input;
+  vector<vector<float> > test_labels;
 
   //vector<float> i1,i2,i3,l1,l2,l3;
   // i1.push_back(1);
@@ -293,6 +364,15 @@ int main(){
   else{
     batch_size = input.size();
   }
+
+  cout<<"Enter number of epochs:";
+  cin>>epochs;
+  cout<<endl;
+  cout<<"Enter perentage of testing records chosen: (0-100)";
+  int split;
+  cin>>split;
+  cout<<endl;
+  createTrainTestSplit(input,labels,test_input,test_labels,split*input.size()/100);
   vector<vector<vector<float> > > WeightMatrixInitializer;
 
   //Start initializing weight matrices here
@@ -315,53 +395,129 @@ int main(){
   // weight_matrices[0][1][2] = 0.2;
   // weight_matrices[1][0][0] = -1*0.3;
   // weight_matrices[1][0][1] = -1*0.2;
-  int samples_processed = 0;
+
   vector<vector<float> > error_matrix;
   vector<vector<float> > hidden_layer_values;
-  while(samples_processed<input.size()){
-    vector<vector<float> > error_matrix1;
-    error_matrix = error_matrix1;
-    hidden_layer_values = error_matrix1;
-    initializeError(error_matrix);
 
-    change_in_weights = WeightMatrixInitializer;
-    change_in_weights.push_back(makeMatrix(input_dim,hidden_dim[0]));
-    //Code here to generalize to more than one hidden hidden_layers
-    for(int i=0; i < hidden_layers-1; i++){
-      change_in_weights.push_back(makeMatrix(hidden_dim[i],hidden_dim[i+1]));
-    }
-    //weight matrix for last hidden layer and output layer
-    change_in_weights.push_back(makeMatrix(hidden_dim[hidden_dim.size()-1],output_dim));
-    for(int i = 0; i < batch_size; i++){
+
+  for(int epoch = 0; epoch<epochs; epoch++){
+    random_shuffle(input.begin(),input.end());
+    int samples_processed = 0;
+    while(samples_processed<input.size()){
+
+      vector<vector<float> > error_matrix1;
+      error_matrix = error_matrix1;
+      hidden_layer_values = error_matrix1;
+      initializeError(error_matrix);
+
+      change_in_weights = WeightMatrixInitializer;
+      change_in_weights.push_back(makeMatrix(input_dim,hidden_dim[0]));
+      //Code here to generalize to more than one hidden hidden_layers
+      for(int i=0; i < hidden_layers-1; i++){
+        change_in_weights.push_back(makeMatrix(hidden_dim[i],hidden_dim[i+1]));
+      }
+      //weight matrix for last hidden layer and output layer
+      change_in_weights.push_back(makeMatrix(hidden_dim[hidden_dim.size()-1],output_dim));
+      for(int i = 0; i < batch_size; i++){
+        if(samples_processed==input.size())
+          break;
+        vector<vector<float> > hiddenValuesInitialzer;
+        hidden_layer_values = hiddenValuesInitialzer;
+
+        vector<float> output;//vector containing outputs received at final layer
+
+        hidden_layer_values.push_back(intermediateOutputs(weight_matrices[0],input[samples_processed]));//hidden layer 1 values
+
+        for(int i = 1; i < weight_matrices.size()-1; i++){//fro 2nd hidden layer to last hidden layer populate values
+          hidden_layer_values.push_back(intermediateOutputs(weight_matrices[i],hidden_layer_values[i-1]));
+        }
+
+        output = intermediateOutputs(weight_matrices[weight_matrices.size()-1],hidden_layer_values[hidden_layer_values.size()-1]);
+
+        populateErrorMatrix(error_matrix,output,hidden_layer_values,labels[samples_processed]);
+        //cout<<"populated error matrix"<<endl;
+        //cout<<input[0][0]<<endl;
+        populateChangeInWeightMatrix(error_matrix, input,samples_processed, hidden_layer_values);
+        //Update weights here
+        //cout<<"populated change_in_weights matrix"<<endl;
+        samples_processed++;
+
+      }
+      //cout<<samples_processed<<endl;
+      updateWeights();
+
       if(samples_processed==input.size())
         break;
-      vector<vector<float> > hiddenValuesInitialzer;
-      hidden_layer_values = hiddenValuesInitialzer;
-
-      vector<float> output;//vector containing outputs received at final layer
-
-      hidden_layer_values.push_back(intermediateOutputs(weight_matrices[0],input[samples_processed]));//hidden layer 1 values
-
-      for(int i = 1; i < weight_matrices.size()-1; i++){//fro 2nd hidden layer to last hidden layer populate values
-        hidden_layer_values.push_back(intermediateOutputs(weight_matrices[i],hidden_layer_values[i-1]));
-      }
-
-      output = intermediateOutputs(weight_matrices[weight_matrices.size()-1],hidden_layer_values[hidden_layer_values.size()-1]);
-
-      populateErrorMatrix(error_matrix,output,hidden_layer_values,labels[samples_processed]);
-      cout<<"populated error matrix"<<endl;
-      cout<<input[0][0]<<endl;
-      populateChangeInWeightMatrix(error_matrix, input,samples_processed, hidden_layer_values);
-      //Update weights here
-      cout<<"populated change_in_weights matrix"<<endl;
-      samples_processed++;
-
     }
-    cout<<samples_processed<<endl;
-    updateWeights();
-
-    if(samples_processed==input.size())
-      break;
+    //printWeights(error_matrix, input[samples_processed-1], hidden_layer_values);
   }
-  printWeights(error_matrix, input[samples_processed-1], hidden_layer_values);
+  //printWeights();
+  //start testing from here
+  vector<vector<float> > test_output;
+  for(int i = 0; i < test_input.size(); i++){
+    vector<vector<float> > hlv;
+    vector<float> o;
+    hlv.push_back(intermediateOutputs(weight_matrices[0],input[i]));//hidden layer 1 values
+
+    for(int i = 1; i < weight_matrices.size()-1; i++){//fro 2nd hidden layer to last hidden layer populate values
+      hlv.push_back(intermediateOutputs(weight_matrices[i],hlv[i-1]));
+    }
+
+    o = intermediateOutputs(weight_matrices[weight_matrices.size()-1],hlv[hlv.size()-1]);
+    //printVector(o);
+    test_output.push_back(o);
+  }
+  float accuracy;
+  int no_of_classes=2;
+  vector<vector<float> > confusion_matrix;
+  vector<float> row;
+  for(int j=0;j<no_of_classes;j++){
+    row.push_back(0);
+  }
+  for(int i=0;i<no_of_classes;i++){
+    confusion_matrix.push_back(row);
+  }
+
+  int count = 0;
+  cout<<"here"<<endl;
+  for(int i = 0; i < test_output.size();i++){
+    if(dataset == 0){
+      for(int j = 0; j < test_output[i].size();j++){
+
+        if(test_output[i][j]<=0.5){
+          test_output[i][j]=0;
+        }
+        else{
+          test_output[i][j]=1;
+        }
+
+        if((test_output[i][j])==test_labels[i][j])
+          count++;
+
+        confusion_matrix[test_labels[i][j]][test_output[i][j]]++;
+
+      }
+    }
+    else{
+      cout<<i<<" output: ";
+      printVector(test_output[i]);
+      cout<<i<<" labels: ";
+      printVector(test_labels[i]);
+      if(distance(test_output[i].begin(),max_element(test_output[i].begin(),test_output[i].end()))==distance(test_labels[i].begin(),max_element(test_labels[i].begin(),test_labels[i].end())))
+        count++;
+
+      confusion_matrix[distance(test_labels[i].begin(),max_element(test_labels[i].begin(),test_labels[i].end()))][distance(test_output[i].begin(),max_element(test_output[i].begin(),test_output[i].end()))]+=1;
+    }
+     // cout<<"printing test output:";
+     // printVector(test_output[i]);
+     // cout<<"printing test labls:";
+     // printVector(test_labels[i]);
+  }
+  cout<<count<<endl;
+  cout<<test_output.size()<<endl;
+  accuracy = (float)count/test_output.size();
+  for(int i = 0; i < confusion_matrix.size();i++){
+    printVector(confusion_matrix[i]);
+  }
+  cout<<"accuracy: "<<accuracy<<endl;
 }
